@@ -182,6 +182,54 @@ def _add_land_use_constraint_m(n, planning_horizons, config):
 
     n.generators.p_nom_max.clip(lower=0, inplace=True)
 
+def add_solar_potential_constraints(n, config):  
+    """
+    Add constraint to make sure the sum capacity of all solar technologies (fixed, tracking, ets. ) is below the region potential.
+    Example:
+    ES1 0: total solar potential is 10 GW, meaning:
+           solar potential : 10 GW
+           solar-hsat potential : 8 GW (solar with single axis tracking is assumed to have 13% higher land use acc. to DEA)
+    The constraint ensures that:
+           solar_p_nom + solar_hsat_p_nom * 1.13 <= 10 GW
+    """
+    land_use_factors= {
+        'solar-hsat'  : config['renewable']['solar']['capacity_per_sqkm']/config['renewable']['solar-hsat']['capacity_per_sqkm'] ,                                                                      
+        }
+    if "m" in snakemake.wildcards.clusters:
+        location = (
+        pd.Series([' '.join(i.split(' ')[:2]) for i in n.generators.index], index=n.generators.index)
+        )
+             
+    else : 
+        location = (
+            n.buses.location
+            if "location" in n.buses.columns
+            else pd.Series(n.buses.index, index=n.buses.index)
+        )
+        
+    gen_index = n.generators[n.generators.p_nom_extendable].index
+
+    ## filter all utility solar generation except solar thermal
+    filters = [("solar", True), ("thermal", False), ("rooftop", False)]
+    solar = reduce(lambda gen_index, f: gen_index[gen_index.str.contains(f[0]) == f[1]], filters, gen_index)
+    solar_original= n.generators.index[n.generators.carrier == "solar"]
+    land_use = pd.DataFrame(1, index=solar, columns=['land_use_factor'])
+    for key in land_use_factors.keys():
+            land_use = land_use.apply(lambda x: (x*land_use_factors[key]) if key in x.name else x,  axis=1)
+
+    rename = {"Generator-ext": "Generator"}
+    ggrouper= pd.Series( n.generators.loc[solar].index.rename('bus').map(location), index=n.generators.loc[solar].index,).to_xarray()
+    lhs = (
+            (n.model["Generator-p_nom"].rename(rename).loc[solar]
+            *land_use.squeeze().values)
+            .groupby(ggrouper) 
+            .sum()
+        )    
+    rhs = (n.generators.loc[solar_original,"p_nom_max"].replace([np.inf, -np.inf], 0)
+                            .groupby(n.generators.loc[solar_original].index.rename('bus').map(location)).sum() ) ##inf p_nom_max for exsisting
+    print('adding solar rooftop constraints...')
+    n.model.add_constraints(lhs <= rhs, name="solar_potential")                
+
 
 def add_co2_sequestration_limit(n, limit=200):
     """
@@ -846,6 +894,7 @@ def extra_functionality(n, snapshots):
     if EQ_o := constraints["EQ"]:
         add_EQ_constraints(n, EQ_o.replace("EQ", ""))
 
+    add_solar_potential_constraints(n, config)
     add_battery_constraints(n)
     add_lossy_bidirectional_link_constraints(n)
     add_pipe_retrofit_constraint(n)
