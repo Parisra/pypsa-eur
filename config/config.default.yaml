@@ -591,7 +591,7 @@ sector:
     OCGT: gas
   biomass_to_liquid: false
   biosng: false
-  solar-utility-singla-axis-tracking : true
+  solar_utility_singla_axis_tracking : true
   limit_max_growth:
     enable: false
     # allowing 30% larger than max historic growth
