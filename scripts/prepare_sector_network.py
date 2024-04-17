@@ -3323,7 +3323,7 @@ def remove_solar_tracking(n):
 
     for tech in ['solar-hsat']:
         print('removing '+tech)
-         n.generators.drop(
+        n.generators.drop(
             n.generators.index[n.generators.carrier==tech], inplace=True
                         )             
 
