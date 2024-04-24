@@ -201,9 +201,9 @@ def add_solar_potential_constraints(n, config):
     ## filter all utility solar generation except solar thermal
     filters = [("solar", True), ("thermal", False), ("rooftop", False)]
     solar = reduce(lambda gen_index, f: gen_index[gen_index.str.contains(f[0]) == f[1]], filters, gen_index)
-    solar_original= n.generators.index[n.generators.carrier == "solar"]
+    solar_original= n.generators[(n.generators.carrier=='solar') & (n.generators.p_nom_extendable)].index
+    solar_hsat = n.generators[(n.generators.carrier=='solar-hsat') ].index
     land_use = pd.DataFrame(1, index=solar, columns=['land_use_factor'])
-    
     for key in land_use_factors.keys():
             land_use = land_use.apply(lambda x: (x*land_use_factors[key]) if key in x.name else x,  axis=1)
 
@@ -213,8 +213,10 @@ def add_solar_potential_constraints(n, config):
         pd.Series([' '.join(i.split(' ')[:2]) for i in n.generators.index], index=n.generators.index)
         )
         ggrouper= pd.Series(n.generators.loc[solar].index.rename('bus').map(location), index=n.generators.loc[solar].index,).to_xarray()
-        rhs = (n.generators.loc[solar_original,"p_nom_max"].replace([np.inf, -np.inf], 0)
-                            .groupby(n.generators.loc[solar_original].index.rename('bus').map(location)).sum() )
+        rhs = (n.generators.loc[solar_original,"p_nom_max"]
+                            .groupby(n.generators.loc[solar_original].index.rename('bus').map(location)).sum() -
+               n.generators.loc[solar_hsat,"p_nom_opt"]
+                            .groupby(n.generators.loc[solar_hsat].index.rename('bus').map(location)).sum() * land_use_factors['solar-hsat'] )
              
     else : 
         location = (
@@ -223,8 +225,10 @@ def add_solar_potential_constraints(n, config):
             else pd.Series(n.buses.index, index=n.buses.index)
         )
         ggrouper= (n.generators.loc[solar].bus)
-        rhs = (n.generators.loc[solar_original,"p_nom_max"].replace([np.inf, -np.inf], 0)
-                            .groupby(n.generators.loc[solar_original].bus.map(location)).sum() ) 
+        rhs = (n.generators.loc[solar_original,"p_nom_max"]      
+                            .groupby(n.generators.loc[solar_original].bus.map(location)).sum() -
+                n.generators.loc[solar_hsat,"p_nom_opt"]    
+                            .groupby(n.generators.loc[solar_hsat].bus.map(location)).sum() * land_use_factors['solar-hsat'] ) 
 
     lhs = (
             (n.model["Generator-p_nom"].rename(rename).loc[solar]
