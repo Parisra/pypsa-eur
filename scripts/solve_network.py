@@ -216,7 +216,7 @@ def add_solar_potential_constraints(n, config):
         rhs = (n.generators.loc[solar_original,"p_nom_max"]
                             .groupby(n.generators.loc[solar_original].index.rename('bus').map(location)).sum() -
                n.generators.loc[solar_hsat,"p_nom_opt"]
-                            .groupby(n.generators.loc[solar_hsat].index.rename('bus').map(location)).sum() * land_use_factors['solar-hsat'] )
+                            .groupby(n.generators.loc[solar_hsat].index.rename('bus').map(location)).sum() * land_use_factors['solar-hsat'] ).clip(lower=0)
              
     else : 
         location = (
@@ -228,7 +228,7 @@ def add_solar_potential_constraints(n, config):
         rhs = (n.generators.loc[solar_original,"p_nom_max"]      
                             .groupby(n.generators.loc[solar_original].bus.map(location)).sum() -
                 n.generators.loc[solar_hsat,"p_nom_opt"]    
-                            .groupby(n.generators.loc[solar_hsat].bus.map(location)).sum() * land_use_factors['solar-hsat'] ) 
+                            .groupby(n.generators.loc[solar_hsat].bus.map(location)).sum() * land_use_factors['solar-hsat'] ).clip(lower=0)
 
     lhs = (
             (n.model["Generator-p_nom"].rename(rename).loc[solar]
